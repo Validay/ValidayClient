@@ -11,6 +11,9 @@ using ValidayServer.Network.Commands.Interfaces;
 
 namespace ValidayClient.Network
 {
+    /// <summary>
+    /// Default client
+    /// </summary>
     public class Client : IClient
     {
         /// <summary>
@@ -78,7 +81,7 @@ namespace ValidayClient.Network
         { }
 
         /// <summary>
-        /// Main client constructor
+        /// Constructor with explicit parameters
         /// </summary>
         /// <param name="clientSettings">Client parameters</param>
         /// <param name="hideSocketError">Hide no critical socket errors</param>
@@ -98,22 +101,6 @@ namespace ValidayClient.Network
                 AddressFamily.InterNetwork,
                 SocketType.Stream,
                 ProtocolType.Tcp);
-        }
-
-        /// <summary>
-        /// <inheritdoc/>
-        /// </summary>
-        /// <exception cref="InvalidOperationException">ClientCommandsMap already exists this id</exception>
-        public void RegistrationCommand<T>(short id)
-            where T : IClientCommand
-        {
-            if (_clientCommandsMap.ContainsKey(id))
-                throw new InvalidOperationException($"ClientCommandsMap already exists this id = {id}!");
-
-            if (_clientCommandsMap.ContainsValue(typeof(T)))
-                throw new InvalidOperationException($"ClientCommandsMap already exists this type {nameof(T)}!");
-
-            _clientCommandsMap.Add(id, typeof(T));
         }
 
         /// <summary>
@@ -276,19 +263,24 @@ namespace ValidayClient.Network
                     _logger?.Log(
                         $"Data {rawData.Length} bytes success received from server!",
                         LogType.Low);
-                }
 
-                _socket.BeginReceive(
+                    _socket.BeginReceive(
                     _buffer,
                     0,
                     _buffer.Length,
                     SocketFlags.None,
                     new AsyncCallback(OnDataReceived),
                     null);
+                }
+                else
+                {
+                    Disconnect();
+                }             
             }
             catch (Exception exception)
             {
-                Disconnect();
+                if (_isRunning)
+                    Disconnect();
 
                 _logger?.Log(
                     $"Data receive from [{_ip}:{_port}] failed! {exception.Message}",

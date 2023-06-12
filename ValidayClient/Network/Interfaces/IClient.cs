@@ -46,14 +46,6 @@ namespace ValidayClient.Network.Interfaces
         event Action OnDisconnected;
 
         /// <summary>
-        /// Registration new client command
-        /// </summary>
-        /// <typeparam name="T">Type client command</typeparam>
-        /// <param name="id">Id client command</param>
-        void RegistrationCommand<T>(short id)
-            where T : IClientCommand;
-
-        /// <summary>
         /// Registration new manager
         /// </summary>
         /// <typeparam name="T">Manager type</typeparam>
