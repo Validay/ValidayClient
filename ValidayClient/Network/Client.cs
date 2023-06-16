@@ -7,7 +7,6 @@ using ValidayClient.Logging;
 using ValidayClient.Logging.Interfaces;
 using ValidayClient.Managers.Interfaces;
 using ValidayClient.Network.Interfaces;
-using ValidayServer.Network.Commands.Interfaces;
 
 namespace ValidayClient.Network
 {
@@ -65,12 +64,15 @@ namespace ValidayClient.Network
         private bool _hideSocketError;
         private string _ip;
         private int _port;
+        private int _maxDepthReadPacket;
         private byte[] _buffer;
         private Socket _socket;
         private IList<IManager> _managers;
         private ILogger _logger;
         private IManagerFactory _managerFactory;
         private Dictionary<short, Type> _clientCommandsMap;
+
+        private readonly byte[] _markerStartPacket;
 
         /// <summary>
         /// Default client constructor
@@ -101,6 +103,13 @@ namespace ValidayClient.Network
                 AddressFamily.InterNetwork,
                 SocketType.Stream,
                 ProtocolType.Tcp);
+
+            _markerStartPacket = new byte[]
+            {
+                1,
+                2,
+                3
+            };
         }
 
         /// <summary>
@@ -188,9 +197,10 @@ namespace ValidayClient.Network
             }
             catch (Exception exception)
             {
-                _logger?.Log(
-                    $"Send data to [{_ip}:{_port}] failed! {exception.Message}",
-                    LogType.Low);
+                if (_hideSocketError)
+                    _logger?.Log(
+                        $"Send data to [{_ip}:{_port}] failed! {exception.Message}",
+                        LogType.Low);
             }
         }
 
@@ -251,26 +261,34 @@ namespace ValidayClient.Network
 
                 if (bytesRead > 0)
                 {
-                    byte[] rawData = new byte[bytesRead];
+                    byte[] receivedData = new byte[bytesRead];
 
                     Array.Copy(
-                        _buffer, 
-                        rawData, 
+                        _buffer,
+                        receivedData, 
                         bytesRead);
 
-                    OnRecivedData?.Invoke(rawData);
+                    ProcessReceivedData(receivedData);
 
-                    _logger?.Log(
-                        $"Data {rawData.Length} bytes success received from server!",
-                        LogType.Low);
+                    if (asyncResult.CompletedSynchronously)
+                    {
+                        while (bytesRead > 0)
+                        {
+                            ProcessReceivedData(receivedData);
 
-                    _socket.BeginReceive(
-                    _buffer,
-                    0,
-                    _buffer.Length,
-                    SocketFlags.None,
-                    new AsyncCallback(OnDataReceived),
-                    null);
+                            bytesRead = _socket.Receive(_buffer);
+                        }
+                    }
+                    else
+                    {
+                        _socket.BeginReceive(
+                            _buffer,
+                            0,
+                            _buffer.Length,
+                            SocketFlags.None,
+                            new AsyncCallback(OnDataReceived),
+                            _socket);
+                    }
                 }
                 else
                 {
@@ -279,18 +297,128 @@ namespace ValidayClient.Network
             }
             catch (Exception exception)
             {
-                if (_isRunning)
-                    Disconnect();
+                Disconnect();
 
-                _logger?.Log(
-                    $"Data receive from [{_ip}:{_port}] failed! {exception.Message}",
-                    LogType.Low);
+                if (_hideSocketError)
+                    _logger?.Log(
+                        $"Data receive from [{_ip}:{_port}] failed! {exception.Message}",
+                        LogType.Low);
             }
         }
 
         private void OnDataSent(IAsyncResult asyncResult)
         {
-            _socket.EndSend(asyncResult);
+            try
+            {
+                _socket.EndSend(asyncResult);
+            }
+            catch (Exception exception)
+            {
+                Disconnect();
+
+                if (_hideSocketError)
+                    _logger?.Log(
+                        $"Data send to [{_ip}:{_port}] failed! {exception.Message}",
+                        LogType.Low);
+            }
+        }
+
+        private void ProcessReceivedData(
+            byte[] receivedData,
+            int depth = 0)
+        {
+            int startMarkerIndex = FindSequence(
+                receivedData,
+                _markerStartPacket);
+
+            if (startMarkerIndex != -1)
+            {
+                if (receivedData.Length >= startMarkerIndex + _markerStartPacket.Length + sizeof(int))
+                {
+                    byte[] sizeIndicator = new byte[sizeof(int)];
+
+                    Array.Copy(
+                        receivedData,
+                        startMarkerIndex + _markerStartPacket.Length,
+                        sizeIndicator,
+                        0,
+                        sizeof(int));
+
+                    int packetSize = BitConverter.ToInt32(
+                        sizeIndicator,
+                        0);
+
+                    if (receivedData.Length >= startMarkerIndex + _markerStartPacket.Length + sizeof(int) + packetSize)
+                    {
+                        byte[] packetData = new byte[packetSize];
+
+                        Array.Copy(
+                            receivedData,
+                            startMarkerIndex + _markerStartPacket.Length + sizeof(int),
+                            packetData,
+                            0,
+                            packetSize);
+
+                        OnRecivedData?.Invoke(packetData);
+
+                        _logger?.Log(
+                            $"Received data [{packetSize} bytes] from server",
+                            LogType.Low);
+
+                        byte[] remainingData = new byte[receivedData.Length - (startMarkerIndex + _markerStartPacket.Length + sizeof(int) + packetSize)];
+
+                        Array.Copy(
+                            receivedData,
+                            startMarkerIndex + _markerStartPacket.Length + sizeof(int) + packetSize,
+                            remainingData,
+                            0,
+                            remainingData.Length);
+
+                        if (remainingData.Length > 0)
+                        {
+                            if (depth < _maxDepthReadPacket)
+                            {
+                                ProcessReceivedData(
+                                    remainingData,
+                                    depth++);
+                            }
+                            else
+                            {
+                                _logger?.Log(
+                                    $"Packet read depth exceeded!",
+                                    LogType.Warning);
+
+                                Disconnect();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private int FindSequence(
+            byte[] data,
+            byte[] sequence)
+        {
+            for (int i = 0; i <= data.Length - sequence.Length; i++)
+            {
+                bool found = true;
+
+                for (int j = 0; j < sequence.Length; j++)
+                {
+                    if (data[i + j] != sequence[j])
+                    {
+                        found = false;
+
+                        break;
+                    }
+                }
+
+                if (found)
+                    return i;
+            }
+
+            return -1;
         }
     }
 }
