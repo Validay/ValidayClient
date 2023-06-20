@@ -149,6 +149,30 @@ namespace ValidayClient.Network
         /// <summary>
         /// <inheritdoc/>
         /// </summary>
+        /// <exception cref="InvalidOperationException">Already exist manager exception</exception>
+        public virtual void RegistrationManager(IManager manager)
+        {
+            bool hasExisting = _managers.FirstOrDefault(existManager => existManager.Name == manager.Name) != null;
+
+            if (hasExisting)
+            {
+                _logger?.Log(
+                    $"Registration manager failed! Manager [{manager.Name}] already registration!",
+                    LogType.Warning);
+
+                throw new InvalidOperationException($"Registration manager failed! Manager [{manager.Name}] already registration!");
+            }
+
+            manager.Initialize(
+                this,
+                _logger);
+
+            _managers.Add(manager);
+        }
+
+        /// <summary>
+        /// <inheritdoc/>
+        /// </summary>
         public void Connect()
         {
             try

@@ -5,7 +5,7 @@ using ValidayClient.Logging;
 using ValidayClient.Logging.Interfaces;
 using ValidayClient.Managers.Interfaces;
 using ValidayClient.Network.Interfaces;
-using ValidayServer.Network.Commands.Interfaces;
+using ValidayClient.Network.Commands.Interfaces;
 
 namespace ValidayClient.Managers
 {

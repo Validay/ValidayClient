@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using ValidayClient.Managers.Interfaces;
-using ValidayServer.Network.Commands.Interfaces;
 
 namespace ValidayClient.Network.Interfaces
 {
@@ -51,6 +50,12 @@ namespace ValidayClient.Network.Interfaces
         /// <typeparam name="T">Manager type</typeparam>
         void RegistrationManager<T>()
             where T : IManager;
+
+        /// <summary>
+        /// Registration new instance manager
+        /// </summary>
+        /// <param name="manager">Instance manager</param>
+        void RegistrationManager(IManager manager);
 
         /// <summary>
         /// Connect to server
