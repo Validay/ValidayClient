@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using ValidayClient.Managers.Interfaces;
 
-namespace ValidayServer.Network.Commands.Interfaces
+namespace ValidayClient.Network.Commands.Interfaces
 {
     /// <summary>
     /// Interface client command
