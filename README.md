@@ -31,7 +31,7 @@ IClient client = new Client(
 
 ### 3. Registration managers
 <pre>
-server.RegistrationManager&ltSomeManager>();
+client.RegistrationManager&ltSomeManager>();
 </pre>
 
 ### 4. Connect to server!
