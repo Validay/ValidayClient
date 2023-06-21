@@ -1,6 +1,6 @@
-﻿using System.Text;
-using ValidayClient.Managers;
+﻿using ValidayClient.Managers;
 using ValidayClient.Network;
+using ValidayClient.Network.Interfaces;
 
 namespace ValidayClientSample
 {
@@ -8,28 +8,15 @@ namespace ValidayClientSample
     {
         static void Main(string[] args)
         {
-            Client client = new Client();
+            IClient client = new Client();
+            CommandHandlerManager commandHandler = new CommandHandlerManager();
 
-            client.RegistrationManager<CommandHandlerManager>();
+            client.RegistrationManager(commandHandler);
 
             client.Connect();
 
             while (client.IsRun)
-            {
-                string? message = Console.ReadLine();
-
-                if (message != null)
-                {
-                    short id = 123;
-                    byte[] messageBytes = Encoding.ASCII.GetBytes(message);
-                    List<byte> bytes = BitConverter.GetBytes(id)
-                        .ToList();
-
-                    bytes.AddRange(messageBytes);
-
-                    client.SendToServer(bytes.ToArray());
-                }
-            }
+            { };
         }
     }
 }
