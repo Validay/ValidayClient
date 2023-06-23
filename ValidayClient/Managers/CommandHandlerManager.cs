@@ -6,6 +6,8 @@ using ValidayClient.Logging.Interfaces;
 using ValidayClient.Managers.Interfaces;
 using ValidayClient.Network.Interfaces;
 using ValidayClient.Network.Commands.Interfaces;
+using ValidayClient.Network.Commands;
+using ValidayClient.Network;
 
 namespace ValidayClient.Managers
 {
@@ -27,61 +29,51 @@ namespace ValidayClient.Managers
         /// <summary>
         /// Get all client commands
         /// </summary>
-        public IReadOnlyDictionary<short, Type> ClientCommandsMap
+        public IReadOnlyDictionary<ushort, Type> ClientCommandsMap
         {
             get => _clientCommandsMap.ToDictionary(
                 command => command.Key,
                 command => command.Value);
         }
 
-        private Dictionary<short, Type> _clientCommandsMap;
+        private Dictionary<ushort, Type> _clientCommandsMap;
+        private ICommandPool<ushort, IClientCommand> _commandClientPool;
+        private IConverterId<ushort> _converterId;
         private IClient? _client;
         private ILogger? _logger;
 
         /// <summary>
         /// Default constructor
         /// </summary>
-        public CommandHandlerManager()
-            : this(new Dictionary<short, Type>())
+        /// <param name="client">Instance client where register this manager</param>
+        /// <param name="logger">Instance logger fot this manager</param>
+        public CommandHandlerManager(
+            IClient client,
+            ILogger logger)
+            : this(
+                  client, 
+                  logger,
+                  new UshortConverterId(),
+                  new Dictionary<ushort, Type>())
         { }
 
         /// <summary>
         /// Constructor with explicit parameters
         /// </summary>
+        /// <param name="client">Instance client where register this manager</param>
+        /// <param name="logger">Instance logger fot this manager</param>
+        /// <param name="converterId">Converter id from bytes</param>
         /// <param name="clientCommandsMap">Client commands</param>
-        public CommandHandlerManager(Dictionary<short, Type> clientCommandsMap)
-        {
-            _clientCommandsMap = clientCommandsMap;
-        }
-
-        /// <summary>
-        /// Registration new command type
-        /// </summary>
-        /// <typeparam name="T">Type command</typeparam>
-        /// <param name="id">Id command</param>
-        /// <exception cref="InvalidOperationException">Already exist command exception</exception>
-        public virtual void RegistrationCommand<T>(short id)
-            where T : IClientCommand
-        {
-            if (_clientCommandsMap == null)
-                _clientCommandsMap = new Dictionary<short, Type>();
-
-            if (_clientCommandsMap.ContainsKey(id))
-                throw new InvalidOperationException($"ClientCommandsMap already exists this id = {id}!");
-
-            if (_clientCommandsMap.ContainsValue(typeof(T)))
-                throw new InvalidOperationException($"ClientCommandsMap already exists this type {nameof(T)}!");
-
-            _clientCommandsMap.Add(id, typeof(T));
-        }
-
-        /// <summary>
-        /// <inheritdoc/>
-        /// </summary>
-        public void Initialize(
+        /// <exception cref="NullReferenceException">Exception null parameters</exception>
+        public CommandHandlerManager(
             IClient client,
-            ILogger logger)
+            ILogger logger,
+            IConverterId<ushort> converterId,
+            Dictionary<ushort, Type> clientCommandsMap)
         {
+            _commandClientPool = new CommandPool<ushort, IClientCommand>();
+            _converterId = converterId;
+            _clientCommandsMap = clientCommandsMap;
             _client = client;
             _logger = logger;
 
@@ -90,6 +82,29 @@ namespace ValidayClient.Managers
 
             if (_logger == null)
                 throw new NullReferenceException($"{nameof(CommandHandlerManager)}: Logger is null!");
+
+            _client.RegistrationManager(this);
+        }
+
+        /// <summary>
+        /// Registration new command type
+        /// </summary>
+        /// <typeparam name="T">Type command</typeparam>
+        /// <param name="id">Id command</param>
+        /// <exception cref="InvalidOperationException">Already exist command exception</exception>
+        public virtual void RegistrationCommand<T>(ushort id)
+            where T : IClientCommand
+        {
+            if (_clientCommandsMap == null)
+                _clientCommandsMap = new Dictionary<ushort, Type>();
+
+            if (_clientCommandsMap.ContainsKey(id))
+                throw new InvalidOperationException($"ClientCommandsMap already exists this id = {id}!");
+
+            if (_clientCommandsMap.ContainsValue(typeof(T)))
+                throw new InvalidOperationException($"ClientCommandsMap already exists this type {nameof(T)}!");
+
+            _clientCommandsMap.Add(id, typeof(T));
         }
 
         /// <summary>
@@ -137,22 +152,19 @@ namespace ValidayClient.Managers
             if (_client == null)
                 return;
 
-            short commandId = BitConverter.ToInt16(data, 0);
-
-            if (_client.ClientCommandsMap.TryGetValue(
+            ushort commandId = _converterId.Convert(data);
+            IClientCommand command = _commandClientPool.GetCommand(
                 commandId,
-                out Type commandType))
-            {
-                if (commandType == null)
-                    return;
+                _clientCommandsMap);
 
-                var command = Activator.CreateInstance(commandType)
-                    as IClientCommand;
+            command.Execute(
+                _client.Managers,
+                data);
 
-                command?.Execute(
-                    _client.Managers,
-                    data);
-            }
+            _commandClientPool.ReturnCommandToPool(
+                commandId,
+                command,
+                _clientCommandsMap);
         }
     }
 }
