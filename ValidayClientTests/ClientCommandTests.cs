@@ -2,6 +2,11 @@ using Xunit;
 using ValidayClient.Network.Commands.Interfaces;
 using ValidayClient.Managers.Interfaces;
 using ValidayClient.Managers;
+using ValidayClient.Network.Interfaces;
+using ValidayClient.Network;
+using ValidayClient.Logging.Interfaces;
+using ValidayClient.Logging;
+using ValidayClient.Network.Commands;
 
 namespace ValidayClientTests
 {
@@ -26,7 +31,12 @@ namespace ValidayClientTests
         [Fact]
         public void RegistrationCommandSuccess()
         {
-            CommandHandlerManager commandHandler = new CommandHandlerManager();
+            IClient client = new Client();
+            ILogger logger = new ConsoleLogger(LogType.Info);
+
+            CommandHandlerManager commandHandler = new CommandHandlerManager(
+                client,
+                logger);
 
             commandHandler.RegistrationCommand<TestClientCommandOne>(1);
 
@@ -42,7 +52,12 @@ namespace ValidayClientTests
         {
             Assert.Throws<InvalidOperationException>(() =>
             {
-                CommandHandlerManager commandHandler = new CommandHandlerManager();
+                IClient client = new Client();
+                ILogger logger = new ConsoleLogger(LogType.Info);
+
+                CommandHandlerManager commandHandler = new CommandHandlerManager(
+                    client,
+                    logger);
 
                 commandHandler.RegistrationCommand<TestClientCommandOne>(1);
                 commandHandler.RegistrationCommand<TestClientCommandOne>(2);
@@ -54,11 +69,51 @@ namespace ValidayClientTests
         {
             Assert.Throws<InvalidOperationException>(() =>
             {
-                CommandHandlerManager commandHandler = new CommandHandlerManager();
+                IClient client = new Client();
+                ILogger logger = new ConsoleLogger(LogType.Info);
+
+                CommandHandlerManager commandHandler = new CommandHandlerManager(
+                    client,
+                    logger);
 
                 commandHandler.RegistrationCommand<TestClientCommandOne>(1);
                 commandHandler.RegistrationCommand<TestClientCommandTwo>(1);
             });
+        }
+
+        [Fact]
+        public void CheckCommandExistInPool()
+        {
+            ICommandPool<ushort, IClientCommand> commandClientPool = new CommandPool<ushort, IClientCommand>();
+            IReadOnlyCollection<IManager> managers = new List<IManager>();
+            IDictionary<ushort, Type> commandMap = new Dictionary<ushort, Type>()
+            {
+                {
+                    1,
+                    typeof(TestClientCommandOne)
+                }
+            };
+
+            IClientCommand commandFirst = commandClientPool.GetCommand(
+                1,
+                commandMap);
+
+            commandFirst.Execute(
+                managers,
+                new byte[1]);
+
+            commandClientPool.ReturnCommandToPool(
+                1,
+                commandFirst,
+                commandMap);
+
+            IClientCommand commandSecond = commandClientPool.GetCommand(
+                1,
+                commandMap);
+
+            Assert.Equal(
+                commandFirst,
+                commandSecond);
         }
     }
 }

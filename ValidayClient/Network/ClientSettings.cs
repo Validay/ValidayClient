@@ -3,8 +3,6 @@ using System.Net;
 using System.Net.Sockets;
 using ValidayClient.Logging;
 using ValidayClient.Logging.Interfaces;
-using ValidayClient.Managers;
-using ValidayClient.Managers.Interfaces;
 
 namespace ValidayClient.Network
 {
@@ -29,9 +27,14 @@ namespace ValidayClient.Network
         public int BufferSize { get; set; }
 
         /// <summary>
-        /// Factory for creating managers
+        /// Maximum depth for reading packet in client network stream
         /// </summary>
-        public IManagerFactory ManagerFactory { get; set; }
+        public int MaxDepthReadPacket { get; set; }
+
+        /// <summary>
+        /// Marker for detect start new packet
+        /// </summary>
+        public byte[] MarkerStartPacket { get; set; }
 
         /// <summary>
         /// Logger for client
@@ -46,7 +49,13 @@ namespace ValidayClient.Network
             Ip = "127.0.0.1",
             BufferSize = 1024,
             Port = 8888,
-            ManagerFactory = new ManagerFactory(),
+            MaxDepthReadPacket = 64,
+            MarkerStartPacket = new byte[]
+            {
+                1,
+                2,
+                3
+            },
             Logger = new ConsoleLogger(LogType.Info)
         };
 
@@ -56,28 +65,32 @@ namespace ValidayClient.Network
         /// <param name="ip">Ip address server for connecting</param>
         /// <param name="port">Port server for connecting</param>
         /// <param name="bufferSize">Buffer size</param>
-        /// <param name="managerFactory">Factory for creating managers</param>
+        /// <param name="maxDepthReadPacket">Maximum depth for reading packet in client network stream</param>
+        /// <param name="markerStartPacket">Marker for detect start new packet</param>
         /// <param name="logger">Logger for client</param>
         /// <exception cref="FormatException">Invalid parameters</exception>
         public ClientSettings(
             string ip,
             int port,
             int bufferSize,
-            IManagerFactory managerFactory,
+            int maxDepthReadPacket,
+            byte[] markerStartPacket,
             ILogger logger)
         {
             if (bufferSize < 0
-                || managerFactory == null
                 || logger == null
                 || port < 0
                 || port > 65535
+                || maxDepthReadPacket < 0
+                || markerStartPacket.Length == 0
                 || !IsValidIpAddress(ip))
                 throw new FormatException($"{nameof(ClientSettings)} create failed! Invalid parameters");
 
             Ip = ip;
             Port = port;
             BufferSize = bufferSize;
-            ManagerFactory = managerFactory;
+            MaxDepthReadPacket = maxDepthReadPacket;
+            MarkerStartPacket = markerStartPacket;
             Logger = logger;
         }
 

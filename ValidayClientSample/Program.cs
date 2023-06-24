@@ -1,4 +1,6 @@
-﻿using ValidayClient.Managers;
+﻿using ValidayClient.Logging;
+using ValidayClient.Logging.Interfaces;
+using ValidayClient.Managers;
 using ValidayClient.Network;
 using ValidayClient.Network.Interfaces;
 
@@ -9,9 +11,11 @@ namespace ValidayClientSample
         static void Main(string[] args)
         {
             IClient client = new Client();
-            CommandHandlerManager commandHandler = new CommandHandlerManager();
+            ILogger logger = new ConsoleLogger(LogType.Info);
 
-            client.RegistrationManager(commandHandler);
+            CommandHandlerManager commandHandler = new CommandHandlerManager(
+                client,
+                logger);
 
             client.Connect();
 

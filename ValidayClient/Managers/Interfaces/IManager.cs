@@ -1,7 +1,4 @@
-﻿using ValidayClient.Logging.Interfaces;
-using ValidayClient.Network.Interfaces;
-
-namespace ValidayClient.Managers.Interfaces
+﻿namespace ValidayClient.Managers.Interfaces
 {
     /// <summary>
     /// Main interface for manager
@@ -17,15 +14,6 @@ namespace ValidayClient.Managers.Interfaces
         /// Get active this manager
         /// </summary>
         bool IsActive { get; }
-
-        /// <summary>
-        /// Initialize this manager
-        /// </summary>
-        /// <param name="client">Client</param>
-        /// <param name="logger">Logger</param>
-        void Initialize(
-            IClient client,
-            ILogger logger);
 
         /// <summary>
         /// Starting this manager
