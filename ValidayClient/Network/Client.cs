@@ -144,6 +144,10 @@ namespace ValidayClient.Network
                 _socket.BeginConnect(ipEndPoint, new AsyncCallback(OnConnect), null);
 
                 _isRunning = true;
+
+                _logger?.Log(
+                    $"Connected to [{_ip}:{_port}] success!",
+                    LogType.Info);
             }
             catch (Exception exception)
             {
