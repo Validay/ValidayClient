@@ -21,6 +21,8 @@ namespace ValidayClientSample
 
             while (client.IsRun)
             { };
+
+            client.Disconnect();
         }
     }
 }
