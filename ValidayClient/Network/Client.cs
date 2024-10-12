@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Net;
@@ -25,12 +26,7 @@ namespace ValidayClient.Network
         /// <summary>
         /// <inheritdoc/>
         /// </summary>
-        public IReadOnlyCollection<IManager> Managers
-        {
-            get => _managers
-                .ToList()
-                .AsReadOnly();
-        }
+        public IReadOnlyCollection<IManager> Managers { get; private set; }
 
         /// <summary>
         /// <inheritdoc/>
@@ -100,6 +96,7 @@ namespace ValidayClient.Network
                 AddressFamily.InterNetwork,
                 SocketType.Stream,
                 ProtocolType.Tcp);
+            Managers = new ReadOnlyCollection<IManager>(_managers);
             OnRecivedData = delegate {};
             OnSendedData = delegate {};
             OnConnected = delegate {};
@@ -124,6 +121,8 @@ namespace ValidayClient.Network
             }
 
             _managers.Add(manager);
+
+            Managers = new ReadOnlyCollection<IManager>(_managers);
         }
 
         /// <summary>
