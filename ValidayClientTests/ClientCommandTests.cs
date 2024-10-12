@@ -14,17 +14,13 @@ namespace ValidayClientTests
     {
         class TestClientCommandOne : IClientCommand
         {
-            public void Execute(
-                IReadOnlyCollection<IManager> managers,
-                byte[] rawData)
+            public void Execute(byte[] rawData)
             { }
         }
 
         class TestClientCommandTwo : IClientCommand
         {
-            public void Execute(
-                IReadOnlyCollection<IManager> managers,
-                byte[] rawData)
+            public void Execute(byte[] rawData)
             { }
         }
 
@@ -98,10 +94,7 @@ namespace ValidayClientTests
                 1,
                 commandMap);
 
-            commandFirst.Execute(
-                managers,
-                new byte[1]);
-
+            commandFirst.Execute(new byte[1]);
             commandClientPool.ReturnCommandToPool(
                 1,
                 commandFirst,
