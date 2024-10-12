@@ -157,9 +157,7 @@ namespace ValidayClient.Managers
                 commandId,
                 _clientCommandsMap);
 
-            command.Execute(
-                _client.Managers,
-                data);
+            command.Execute(data);
 
             _commandClientPool.ReturnCommandToPool(
                 commandId,

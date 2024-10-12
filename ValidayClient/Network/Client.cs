@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -44,22 +45,22 @@ namespace ValidayClient.Network
         /// <summary>
         /// <inheritdoc/>
         /// </summary>
-        public event Action<byte[]>? OnRecivedData;
+        public event Action<byte[]> OnRecivedData;
 
         /// <summary>
         /// <inheritdoc/>
         /// </summary>
-        public event Action<byte[]>? OnSendedData;
+        public event Action<byte[]> OnSendedData;
 
         /// <summary>
         /// <inheritdoc/>
         /// </summary>
-        public event Action? OnConnected;
+        public event Action OnConnected;
 
         /// <summary>
         /// <inheritdoc/>
         /// </summary>
-        public event Action? OnDisconnected;
+        public event Action OnDisconnected;
 
         private bool _isRunning;
         private bool _hideSocketError;
@@ -99,13 +100,17 @@ namespace ValidayClient.Network
                 AddressFamily.InterNetwork,
                 SocketType.Stream,
                 ProtocolType.Tcp);
+            OnRecivedData = delegate {};
+            OnSendedData = delegate {};
+            OnConnected = delegate {};
+            OnDisconnected = delegate {};
         }
 
         /// <summary>
         /// <inheritdoc/>
         /// </summary>
         /// <exception cref="InvalidOperationException">Already exist manager exception</exception>
-        public virtual void RegistrationManager(IManager manager)
+        public virtual void RegistrationManager([NotNull] IManager manager)
         {
             bool hasExisting = _managers.FirstOrDefault(existManager => existManager.Name == manager.Name) != null;
 
@@ -156,7 +161,7 @@ namespace ValidayClient.Network
         /// <summary>
         /// <inheritdoc/>
         /// </summary>
-        public void SendToServer(IServerCommand serverCommand)
+        public void SendToServer([NotNull] IServerCommand serverCommand)
         {
             try
             {
@@ -169,8 +174,7 @@ namespace ValidayClient.Network
                     SocketFlags.None,
                     new AsyncCallback(OnDataSent),
                     null);
-
-                OnSendedData?.Invoke(rawData);
+                OnSendedData.Invoke(rawData);
 
                 _logger?.Log(
                     $"Send {rawData.Length} bytes to [{_ip}:{_port}] success!",
@@ -220,7 +224,7 @@ namespace ValidayClient.Network
                     new AsyncCallback(OnDataReceived),
                     null);
 
-                OnConnected?.Invoke();
+                OnConnected.Invoke();
 
                 _logger?.Log(
                     $"Connect to [{_ip}:{_port}] success!",
@@ -251,7 +255,7 @@ namespace ValidayClient.Network
                         ref buffer,
                         receive);
 
-                OnRecivedData?.Invoke(buffer);
+                OnRecivedData.Invoke(buffer);
                 _socket.BeginReceive(
                    new byte[] { },
                    0,
