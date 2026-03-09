@@ -7,68 +7,58 @@ using ValidayClient.Logging.Interfaces;
 namespace ValidayClient.Network
 {
     /// <summary>
-    /// Client settings for connect server
+    /// Client configuration.
+    /// Declared as a class (not struct) because it contains reference-type fields
+    /// (ILogger, byte[]) — copying a struct would share those references silently.
     /// </summary>
-    public struct ClientSettings
+    public class ClientSettings
     {
         /// <summary>
-        /// Ip address server for connecting
+        /// IP address of the server to connect to
         /// </summary>
         public string Ip { get; set; }
 
         /// <summary>
-        /// Port server for connecting
+        /// Port of the server to connect to
         /// </summary>
         public int Port { get; set; }
 
         /// <summary>
-        /// Buffer size
+        /// Receive buffer size in bytes
         /// </summary>
         public int BufferSize { get; set; }
 
         /// <summary>
-        /// Maximum depth for reading packet in client network stream
+        /// Maximum read depth for a single packet (framing guard)
         /// </summary>
         public int MaxDepthReadPacket { get; set; }
 
         /// <summary>
-        /// Marker for detect start new packet
+        /// Byte sequence that marks the beginning of a new packet
         /// </summary>
         public byte[] MarkerStartPacket { get; set; }
 
         /// <summary>
-        /// Logger for client
+        /// Logger used by the client
         /// </summary>
         public ILogger Logger { get; set; }
 
         /// <summary>
-        /// Default client settings
+        /// Ready-to-use default settings (localhost:8888)
         /// </summary>
-        public static ClientSettings Default => new ClientSettings
-        {
-            Ip = "127.0.0.1",
-            BufferSize = 1024,
-            Port = 8888,
-            MaxDepthReadPacket = 64,
-            MarkerStartPacket = new byte[]
-            {
-                1,
-                2,
-                3
-            },
-            Logger = new ConsoleLogger(LogType.Info)
-        };
+        public static ClientSettings Default => new ClientSettings(
+            ip: "127.0.0.1",
+            port: 8888,
+            bufferSize: 1024,
+            maxDepthReadPacket: 64,
+            markerStartPacket: new byte[] { 1, 2, 3 },
+            logger: new ConsoleLogger(LogType.Info));
 
         /// <summary>
-        /// Default constructor client settings
+        /// Creates and validates client settings.
         /// </summary>
-        /// <param name="ip">Ip address server for connecting</param>
-        /// <param name="port">Port server for connecting</param>
-        /// <param name="bufferSize">Buffer size</param>
-        /// <param name="maxDepthReadPacket">Maximum depth for reading packet in client network stream</param>
-        /// <param name="markerStartPacket">Marker for detect start new packet</param>
-        /// <param name="logger">Logger for client</param>
-        /// <exception cref="FormatException">Invalid parameters</exception>
+        /// <exception cref="FormatException">Thrown when any parameter is out of range or invalid.</exception>
+        /// <exception cref="ArgumentNullException">Thrown when logger is null.</exception>
         public ClientSettings(
             string ip,
             int port,
@@ -77,14 +67,23 @@ namespace ValidayClient.Network
             byte[] markerStartPacket,
             ILogger logger)
         {
-            if (bufferSize < 0
-                || logger == null
-                || port < 0
-                || port > 65535
-                || maxDepthReadPacket < 0
-                || markerStartPacket.Length == 0
-                || !IsValidIpAddress(ip))
-                throw new FormatException($"{nameof(ClientSettings)} create failed! Invalid parameters");
+            if (!IsValidIpAddress(ip))
+                throw new FormatException($"{nameof(ClientSettings)}: invalid IP address '{ip}'.");
+
+            if (port < 0 || port > 65535)
+                throw new FormatException($"{nameof(ClientSettings)}: port must be 0–65535, got {port}.");
+
+            if (bufferSize < 0)
+                throw new FormatException($"{nameof(ClientSettings)}: bufferSize must be >= 0.");
+
+            if (maxDepthReadPacket < 0)
+                throw new FormatException($"{nameof(ClientSettings)}: maxDepthReadPacket must be >= 0.");
+
+            if (markerStartPacket == null || markerStartPacket.Length == 0)
+                throw new FormatException($"{nameof(ClientSettings)}: markerStartPacket must not be empty.");
+
+            if (logger == null)
+                throw new ArgumentNullException(nameof(logger));
 
             Ip = ip;
             Port = port;
@@ -96,14 +95,11 @@ namespace ValidayClient.Network
 
         private static bool IsValidIpAddress(string ipAddress)
         {
-            if (IPAddress.TryParse(ipAddress, out IPAddress parsedIpAddress))
-            {
-                if (parsedIpAddress.AddressFamily == AddressFamily.InterNetwork
-                    || parsedIpAddress.AddressFamily == AddressFamily.InterNetworkV6)
-                    return true;
-            }
+            if (!IPAddress.TryParse(ipAddress, out IPAddress parsed))
+                return false;
 
-            return false;
+            return parsed.AddressFamily == AddressFamily.InterNetwork
+                || parsed.AddressFamily == AddressFamily.InterNetworkV6;
         }
     }
 }

@@ -28,14 +28,14 @@ namespace ValidayClient.Network.Commands
             }
         }
 
-        private readonly ConcurrentDictionary<Type, List<CommandElement>> _commandPool;
+        private readonly ConcurrentDictionary<Type, ConcurrentBag<CommandElement>> _commandPool;
 
         /// <summary>
         /// Default constructor
         /// </summary>
         public CommandPool()
         {
-            _commandPool = new ConcurrentDictionary<Type, List<CommandElement>>();
+            _commandPool = new ConcurrentDictionary<Type, ConcurrentBag<CommandElement>>();
         }
 
         /// <summary>
@@ -43,36 +43,26 @@ namespace ValidayClient.Network.Commands
         /// </summary>
         /// <exception cref="KeyNotFoundException">When id command dont exist</exception>
         public TCommand GetCommand(
-            TId id,
+            TId id, 
             IDictionary<TId, Type> commandsMap)
         {
-            lock (commandsMap)
+            if (!commandsMap.ContainsKey(id))
+                throw new KeyNotFoundException($"Command with ID {id} not founded in client commands map.");
+
+            lock (_commandPool)
             {
-                if (!commandsMap.ContainsKey(id))
-                    throw new KeyNotFoundException($"Command with ID {id} not founded in client commands map.");
-
-                lock (_commandPool)
+                if (_commandPool.ContainsKey(commandsMap[id])
+                    && _commandPool.TryGetValue(commandsMap[id], out ConcurrentBag<CommandElement> bag))
                 {
-                    if (_commandPool.ContainsKey(commandsMap[id]))
-                    {
-                        CommandElement commandElement = _commandPool[commandsMap[id]].FirstOrDefault(commandElement =>
-                        {
-                            if (commandElement != null
-                                && commandElement.Id != null)
-                                return commandElement.Id.Equals(id);
+                    bag.TryTake(out CommandElement? element);  // атомарно берёт и удаляет
 
-                            return false;
-                        });
-
-                        return commandElement?.Command
-                            ?? (TCommand)Activator.CreateInstance(commandsMap[id]);
-                    }
-                    else
-                    {
-                        _commandPool[commandsMap[id]] = new List<CommandElement>();
-
-                        return (TCommand)Activator.CreateInstance(commandsMap[id]);
-                    }
+                    return element?.Command
+                        ?? (TCommand)Activator.CreateInstance(commandsMap[id]);
+                }
+                else
+                {
+                    _commandPool.TryAdd(commandsMap[id], new ConcurrentBag<CommandElement>());
+                    return (TCommand)Activator.CreateInstance(commandsMap[id]);
                 }
             }
         }
@@ -93,7 +83,7 @@ namespace ValidayClient.Network.Commands
                 command);
 
             if (!_commandPool.ContainsKey(commandsMap[id]))
-                _commandPool[commandsMap[id]] = new List<CommandElement>();
+                _commandPool.TryAdd(commandsMap[id], new ConcurrentBag<CommandElement>());
 
             _commandPool[commandsMap[id]].Add(commandElement);
         }
