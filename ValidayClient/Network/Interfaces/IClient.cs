@@ -6,65 +6,64 @@ using ValidayClient.Network.Commands.Interfaces;
 namespace ValidayClient.Network.Interfaces
 {
     /// <summary>
-    /// Interface for client
+    /// Interface for a client that connects to a server.
+    /// Note: ClientCommandsMap intentionally lives on CommandHandlerManager (via ICommandRegistry),
+    /// not here — IClient should not be aware of command routing details.
     /// </summary>
     public interface IClient
     {
         /// <summary>
-        /// Is the client running
+        /// Is the client currently connected
         /// </summary>
         bool IsRun { get; }
 
         /// <summary>
-        /// Managers colection 
+        /// Registered managers collection
         /// </summary>
         IReadOnlyCollection<IManager> Managers { get; }
 
         /// <summary>
-        /// Get all client commands
-        /// </summary>
-        IReadOnlyDictionary<short, Type> ClientCommandsMap { get; }
-
-        /// <summary>
-        /// Event for recived data from server
+        /// Fires when data is received from the server
         /// </summary>
         event Action<byte[]> OnRecivedData;
 
         /// <summary>
-        /// Event for sended data to server
+        /// Fires when data is sent to the server
         /// </summary>
         event Action<byte[]> OnSendedData;
 
         /// <summary>
-        /// Event for connect to server
+        /// Fires when connected to the server
         /// </summary>
         event Action OnConnected;
 
         /// <summary>
-        /// Event for disconnect from server
+        /// Fires when disconnected from the server
         /// </summary>
         event Action OnDisconnected;
 
         /// <summary>
-        /// Registration new instance manager
+        /// Register a manager. Must be called before Connect().
         /// </summary>
-        /// <param name="manager">Instance manager</param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown if a manager with the same name is already registered,
+        /// or if the client is already running.
+        /// </exception>
         void RegistrationManager(IManager manager);
 
         /// <summary>
-        /// Connect to server
+        /// Connect to the server
         /// </summary>
         void Connect();
 
         /// <summary>
-        /// Disconnect from server
+        /// Disconnect from the server
         /// </summary>
         void Disconnect();
 
         /// <summary>
-        /// Send data to server
+        /// Send a command to the server
         /// </summary>
-        /// <param name="serverCommand">Command for send to server</param>
         void SendToServer(IServerCommand serverCommand);
     }
 }

@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -14,220 +13,206 @@ using ValidayClient.Network.Interfaces;
 namespace ValidayClient.Network
 {
     /// <summary>
-    /// Default client
+    /// Default TCP client implementation.
+    /// Implements IDisposable because it owns a Socket.
     /// </summary>
-    public class Client : IClient
+    public class Client : IClient, IDisposable
     {
-        /// <summary>
         /// <inheritdoc/>
-        /// </summary>
         public bool IsRun => _isRunning;
 
-        /// <summary>
         /// <inheritdoc/>
-        /// </summary>
         public IReadOnlyCollection<IManager> Managers { get; private set; }
 
-        /// <summary>
         /// <inheritdoc/>
-        /// </summary>
-        public IReadOnlyDictionary<short, Type> ClientCommandsMap
-        {
-            get => _clientCommandsMap.ToDictionary(
-                command => command.Key,
-                command => command.Value);
-        }
+        public event Action<byte[]> OnRecivedData = delegate { };
 
-        /// <summary>
         /// <inheritdoc/>
-        /// </summary>
-        public event Action<byte[]> OnRecivedData;
+        public event Action<byte[]> OnSendedData = delegate { };
 
-        /// <summary>
         /// <inheritdoc/>
-        /// </summary>
-        public event Action<byte[]> OnSendedData;
+        public event Action OnConnected = delegate { };
 
-        /// <summary>
         /// <inheritdoc/>
-        /// </summary>
-        public event Action OnConnected;
-
-        /// <summary>
-        /// <inheritdoc/>
-        /// </summary>
-        public event Action OnDisconnected;
+        public event Action OnDisconnected = delegate { };
 
         private bool _isRunning;
+        private bool _disposed;
         private bool _hideSocketError;
         private string _ip;
         private int _port;
         private int _bufferSize;
-        private Socket _socket;
+        private Socket? _socket;
         private IList<IManager> _managers;
         private ILogger _logger;
-        private Dictionary<short, Type> _clientCommandsMap;
 
         /// <summary>
-        /// Default client constructor
+        /// Creates a client with default settings.
         /// </summary>
         public Client() 
-            : this(ClientSettings.Default,
-                  true)
+            : this(
+                  ClientSettings.Default, 
+                  hideSocketError: true) 
         { }
 
         /// <summary>
-        /// Constructor with explicit parameters
+        /// Creates a client with explicit settings.
         /// </summary>
-        /// <param name="clientSettings">Client parameters</param>
-        /// <param name="hideSocketError">Hide no critical socket errors</param>
+        /// <param name="settings">Configuration to use.</param>
+        /// <param name="hideSocketError">When true, non-critical socket errors are suppressed from the log.</param>
         public Client(
-            ClientSettings clientSettings,
+            ClientSettings settings,
             bool hideSocketError)
         {
             _hideSocketError = hideSocketError;
-            _ip = clientSettings.Ip;
-            _port = clientSettings.Port;
-            _bufferSize = clientSettings.BufferSize;
-            _logger = clientSettings.Logger;
-            _clientCommandsMap = new Dictionary<short, Type>();
+            _ip = settings.Ip;
+            _port = settings.Port;
+            _bufferSize = settings.BufferSize;
+            _logger = settings.Logger;
             _managers = new List<IManager>();
-            _socket = new Socket(
-                AddressFamily.InterNetwork,
-                SocketType.Stream,
-                ProtocolType.Tcp);
             Managers = new ReadOnlyCollection<IManager>(_managers);
-            OnRecivedData = delegate {};
-            OnSendedData = delegate {};
-            OnConnected = delegate {};
-            OnDisconnected = delegate {};
         }
 
-        /// <summary>
         /// <inheritdoc/>
-        /// </summary>
-        /// <exception cref="InvalidOperationException">Already exist manager exception</exception>
-        public virtual void RegistrationManager([NotNull] IManager manager)
+        /// <exception cref="InvalidOperationException">
+        /// Thrown if a manager with the same name is already registered,
+        /// or if the client is already running.
+        /// </exception>
+        public virtual void RegistrationManager(IManager manager)
         {
-            bool hasExisting = _managers.FirstOrDefault(existManager => existManager.Name == manager.Name) != null;
+            if (_isRunning)
+                throw new InvalidOperationException(
+                    $"Cannot register manager [{manager.Name}] after the client has connected.");
 
-            if (hasExisting)
+            bool alreadyExists = _managers.Any(m => m.Name == manager.Name);
+
+            if (alreadyExists)
             {
                 _logger?.Log(
-                    $"Registration manager failed! Manager [{manager.Name}] already registration!",
+                    $"Registration manager failed! Manager [{manager.Name}] already registered!",
                     LogType.Warning);
 
-                throw new InvalidOperationException($"Registration manager failed! Manager [{manager.Name}] already registration!");
+                throw new InvalidOperationException(
+                    $"Registration manager failed! Manager [{manager.Name}] already registered!");
             }
 
             _managers.Add(manager);
-
             Managers = new ReadOnlyCollection<IManager>(_managers);
         }
 
-        /// <summary>
         /// <inheritdoc/>
-        /// </summary>
-        public void Connect()
+        public virtual void Connect()
         {
             try
             {
-                IPAddress ipAddress = IPAddress.Parse(_ip);
-                IPEndPoint ipEndPoint = new IPEndPoint(ipAddress, _port);
+                _logger?.Log($"Connecting to [{_ip}:{_port}]...", LogType.Info);
 
-                _managers.ToList()
-                    .ForEach(manager =>
-                    {
-                        manager.Start();
-                    });
+                _socket = new Socket(
+                    AddressFamily.InterNetwork,
+                    SocketType.Stream,
+                    ProtocolType.Tcp);
 
-                _socket.BeginConnect(ipEndPoint, new AsyncCallback(OnConnect), null);
+                foreach (IManager manager in _managers)
+                    manager.Start();
 
-                _isRunning = true;
-
-                _logger?.Log(
-                    $"Connected to [{_ip}:{_port}] success!",
-                    LogType.Info);
+                _socket.BeginConnect(
+                    new IPEndPoint(IPAddress.Parse(_ip), _port),
+                    OnConnect,
+                    null);
             }
             catch (Exception exception)
             {
-                _logger?.Log(
-                    $"Connect to [{_ip}:{_port}] failed! {exception.Message}",
-                    LogType.Error);
+                _logger?.Log($"Connect to [{_ip}:{_port}] failed! {exception.Message}", LogType.CriticalError);
             }
         }
 
-        /// <summary>
         /// <inheritdoc/>
-        /// </summary>
-        public void SendToServer([NotNull] IServerCommand serverCommand)
+        public virtual void Disconnect()
         {
+            try
+            {
+                foreach (IManager manager in _managers)
+                    manager.Stop();
+
+                if (_socket != null)
+                {
+                    _socket.Close();
+                    _socket = null;
+                    _isRunning = false;
+                }
+
+                OnDisconnected.Invoke();
+
+                _logger?.Log($"Disconnected from [{_ip}:{_port}].", LogType.Info);
+            }
+            catch (Exception exception)
+            {
+                if (!_hideSocketError)
+                    _logger?.Log($"Disconnect failed! {exception.Message}", LogType.Error);
+            }
+        }
+
+        /// <inheritdoc/>
+        public virtual void SendToServer(IServerCommand serverCommand)
+        {
+            if (_socket == null || !_isRunning)
+                return;
+
             try
             {
                 byte[] rawData = serverCommand.GetRawData();
 
                 _socket.BeginSend(
-                    rawData,
-                    0,
-                    rawData.Length,
+                    rawData, 0, rawData.Length,
                     SocketFlags.None,
-                    new AsyncCallback(OnDataSent),
+                    OnDataSent,
                     null);
+
                 OnSendedData.Invoke(rawData);
 
                 _logger?.Log(
-                    $"Send {rawData.Length} bytes to [{_ip}:{_port}] success!",
+                    $"Send data [{rawData.Length} bytes] to [{_ip}:{_port}]",
                     LogType.Low);
             }
             catch (Exception exception)
             {
-                if (_hideSocketError)
-                    _logger?.Log(
-                        $"Send data to [{_ip}:{_port}] failed! {exception.Message}",
-                        LogType.Low);
+                if (!_hideSocketError)
+                    _logger?.Log($"Send to [{_ip}:{_port}] failed! {exception.Message}", LogType.Warning);
             }
         }
 
-        /// <summary>
         /// <inheritdoc/>
-        /// </summary>
-        public void Disconnect()
+        public void Dispose()
         {
-            _managers.ToList()
-                .ForEach(manager =>
-                {
-                    manager.Stop();
-                });
+            if (_disposed)
+                return;
 
-            _socket?.Close();
-            _socket?.Dispose();
-            OnDisconnected?.Invoke();
+            _disposed = true;
 
-            _isRunning = false;
-
-            _logger?.Log(
-                $"Disconnected from [{_ip}:{_port}]!",
-                LogType.Info);
+            try
+            {
+                _socket?.Dispose();
+                _socket = null;
+            }
+            catch { }
         }
 
         private void OnConnect(IAsyncResult asyncResult)
         {
             try
             {
-                _socket?.EndConnect(asyncResult);
-                _socket?.BeginReceive(
-                    new byte[] { },
-                    0,
-                    0,
-                    SocketFlags.None,
-                    new AsyncCallback(OnDataReceived),
-                    null);
+                _socket!.EndConnect(asyncResult);
+                _isRunning = true;
 
                 OnConnected.Invoke();
 
-                _logger?.Log(
-                    $"Connect to [{_ip}:{_port}] success!",
-                    LogType.Info);
+                _logger?.Log($"Connected to [{_ip}:{_port}] success!", LogType.Info);
+
+                _socket.BeginReceive(
+                    Array.Empty<byte>(), 0, 0,
+                    SocketFlags.None,
+                    OnDataReceived,
+                    null);
             }
             catch (Exception exception)
             {
@@ -241,34 +226,35 @@ namespace ValidayClient.Network
         {
             try
             {
-                _socket.EndReceive(asyncResult);
+                _socket!.EndReceive(asyncResult);
 
                 byte[] buffer = new byte[_bufferSize];
-                int receive = _socket.Receive(
-                    buffer,
-                    buffer.Length,
-                    SocketFlags.None);
+                int received = _socket.Receive(buffer, buffer.Length, SocketFlags.None);
 
-                if (receive < buffer.Length)
-                    Array.Resize(
-                        ref buffer,
-                        receive);
+                if (received == 0)
+                {
+                    Disconnect();
+
+                    return;
+                }
+
+                if (received < buffer.Length)
+                    Array.Resize(ref buffer, received);
 
                 OnRecivedData.Invoke(buffer);
+
                 _socket.BeginReceive(
-                   new byte[] { },
-                   0,
-                   0,
-                   SocketFlags.None,
-                   new AsyncCallback(OnDataReceived),
-                   _socket);
+                    Array.Empty<byte>(), 0, 0,
+                    SocketFlags.None,
+                    OnDataReceived,
+                    null);
             }
             catch (Exception exception)
             {
-                if (_hideSocketError)
+                if (!_hideSocketError)
                     _logger?.Log(
                         $"Data receive from [{_ip}:{_port}] failed! {exception.Message}",
-                        LogType.Low);
+                        LogType.Error);
 
                 Disconnect();
             }
@@ -278,16 +264,16 @@ namespace ValidayClient.Network
         {
             try
             {
-                _socket.EndSend(asyncResult);
+                _socket!.EndSend(asyncResult);
+
+                _logger?.Log($"Data sent to [{_ip}:{_port}] success!", LogType.Low);
             }
             catch (Exception exception)
             {
-                Disconnect();
-
-                if (_hideSocketError)
+                if (!_hideSocketError)
                     _logger?.Log(
-                        $"Data send to [{_ip}:{_port}] failed! {exception.Message}",
-                        LogType.Low);
+                        $"Data sent to [{_ip}:{_port}] failed! {exception.Message}",
+                        LogType.Error);
             }
         }
     }
