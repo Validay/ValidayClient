@@ -11,7 +11,7 @@
 
 ---
 
-*Designed to pair with [ValidayServer](https://github.com/your-org/ValidayServer).*
+*Designed to pair with [ValidayServer](https://github.com/Validay/ValidayServer).*
 
 </div>
 
