@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -22,13 +22,13 @@ namespace ValidayClient.Network
         public bool IsRun => _isRunning;
 
         /// <inheritdoc/>
-        public IReadOnlyCollection<IManager> Managers { get; private set; }
+        public IReadOnlyCollection<IManager> Managers { get; }
 
         /// <inheritdoc/>
-        public event Action<byte[]> OnRecivedData = delegate { };
+        public event Action<byte[]> OnReceivedData = delegate { };
 
         /// <inheritdoc/>
-        public event Action<byte[]> OnSendedData = delegate { };
+        public event Action<byte[]> OnSentData = delegate { };
 
         /// <inheritdoc/>
         public event Action OnConnected = delegate { };
@@ -49,10 +49,10 @@ namespace ValidayClient.Network
         /// <summary>
         /// Creates a client with default settings.
         /// </summary>
-        public Client() 
+        public Client()
             : this(
-                  ClientSettings.Default, 
-                  hideSocketError: true) 
+                  ClientSettings.Default,
+                  hideSocketError: true)
         { }
 
         /// <summary>
@@ -78,26 +78,23 @@ namespace ValidayClient.Network
         /// Thrown if a manager with the same name is already registered,
         /// or if the client is already running.
         /// </exception>
-        public virtual void RegistrationManager(IManager manager)
+        public virtual void RegisterManager(IManager manager)
         {
             if (_isRunning)
                 throw new InvalidOperationException(
                     $"Cannot register manager [{manager.Name}] after the client has connected.");
 
-            bool alreadyExists = _managers.Any(m => m.Name == manager.Name);
-
-            if (alreadyExists)
+            if (_managers.Any(m => m.Name == manager.Name))
             {
                 _logger?.Log(
-                    $"Registration manager failed! Manager [{manager.Name}] already registered!",
+                    $"Register manager failed! Manager [{manager.Name}] already registered!",
                     LogType.Warning);
 
                 throw new InvalidOperationException(
-                    $"Registration manager failed! Manager [{manager.Name}] already registered!");
+                    $"Register manager failed! Manager [{manager.Name}] already registered!");
             }
 
             _managers.Add(manager);
-            Managers = new ReadOnlyCollection<IManager>(_managers);
         }
 
         /// <inheritdoc/>
@@ -168,7 +165,7 @@ namespace ValidayClient.Network
                     OnDataSent,
                     null);
 
-                OnSendedData.Invoke(rawData);
+                OnSentData.Invoke(rawData);
 
                 _logger?.Log(
                     $"Send data [{rawData.Length} bytes] to [{_ip}:{_port}]",
@@ -241,7 +238,7 @@ namespace ValidayClient.Network
                 if (received < buffer.Length)
                     Array.Resize(ref buffer, received);
 
-                OnRecivedData.Invoke(buffer);
+                OnReceivedData.Invoke(buffer);
 
                 _socket.BeginReceive(
                     Array.Empty<byte>(), 0, 0,

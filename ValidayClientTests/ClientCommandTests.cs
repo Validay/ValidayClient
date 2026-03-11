@@ -28,12 +28,6 @@ namespace ValidayClientTests
             public void Execute(byte[] rawData) { }
         }
 
-        class ThrowingCommand : IClientCommand
-        {
-            public void Execute(byte[] rawData)
-                => throw new InvalidOperationException("Intentional error");
-        }
-
         static (IClient client, CommandHandlerManager handler) MakeClient()
         {
             IClient client = new Client();
@@ -43,56 +37,56 @@ namespace ValidayClientTests
         }
 
         [Fact]
-        public void RegistrationCommand_Success_AppearsInMap()
+        public void RegisterCommand_Success_AppearsInMap()
         {
             var (_, handler) = MakeClient();
 
-            handler.RegistrationCommand<TestCommandOne>(1);
+            handler.RegisterCommand<TestCommandOne>(1);
 
-            Assert.True(handler.ClientCommandsMap.ContainsKey(1));
-            Assert.Equal(typeof(TestCommandOne), handler.ClientCommandsMap[1]);
+            Assert.True(handler.CommandsMap.ContainsKey(1));
+            Assert.Equal(typeof(TestCommandOne), handler.CommandsMap[1]);
         }
 
         [Fact]
-        public void RegistrationCommand_MultipleCommands_AllPresentInMap()
+        public void RegisterCommand_MultipleCommands_AllPresentInMap()
         {
             var (_, handler) = MakeClient();
 
-            handler.RegistrationCommand<TestCommandOne>(1);
-            handler.RegistrationCommand<TestCommandTwo>(2);
+            handler.RegisterCommand<TestCommandOne>(1);
+            handler.RegisterCommand<TestCommandTwo>(2);
 
-            Assert.Equal(2, handler.ClientCommandsMap.Count);
-            Assert.Equal(typeof(TestCommandOne), handler.ClientCommandsMap[1]);
-            Assert.Equal(typeof(TestCommandTwo), handler.ClientCommandsMap[2]);
+            Assert.Equal(2, handler.CommandsMap.Count);
+            Assert.Equal(typeof(TestCommandOne), handler.CommandsMap[1]);
+            Assert.Equal(typeof(TestCommandTwo), handler.CommandsMap[2]);
         }
 
         [Fact]
-        public void RegistrationCommand_DuplicateId_ThrowsInvalidOperationException()
+        public void RegisterCommand_DuplicateId_ThrowsInvalidOperationException()
         {
             var (_, handler) = MakeClient();
-            handler.RegistrationCommand<TestCommandOne>(1);
+            handler.RegisterCommand<TestCommandOne>(1);
 
             Assert.Throws<InvalidOperationException>(() =>
-                handler.RegistrationCommand<TestCommandTwo>(1));
+                handler.RegisterCommand<TestCommandTwo>(1));
         }
 
         [Fact]
-        public void RegistrationCommand_DuplicateType_ThrowsInvalidOperationException()
+        public void RegisterCommand_DuplicateType_ThrowsInvalidOperationException()
         {
             var (_, handler) = MakeClient();
-            handler.RegistrationCommand<TestCommandOne>(1);
+            handler.RegisterCommand<TestCommandOne>(1);
 
             Assert.Throws<InvalidOperationException>(() =>
-                handler.RegistrationCommand<TestCommandOne>(2));
+                handler.RegisterCommand<TestCommandOne>(2));
         }
 
         [Fact]
-        public void RegistrationCommand_MapIsReadOnly_CannotBeModifiedExternally()
+        public void RegisterCommand_MapIsReadOnly_CannotBeModifiedExternally()
         {
             var (_, handler) = MakeClient();
-            handler.RegistrationCommand<TestCommandOne>(1);
+            handler.RegisterCommand<TestCommandOne>(1);
 
-            var snapshot = handler.ClientCommandsMap;
+            var snapshot = handler.CommandsMap;
 
             Assert.Throws<NotSupportedException>(() =>
                 ((IDictionary<ushort, Type>)snapshot).Add(99, typeof(TestCommandTwo)));
@@ -288,14 +282,14 @@ namespace ValidayClientTests
         }
 
         [Fact]
-        public void Client_OnRecivedData_CanSubscribeAndUnsubscribe()
+        public void Client_OnReceivedData_CanSubscribeAndUnsubscribe()
         {
             IClient client = new Client();
             int callCount = 0;
             Action<byte[]> handler = _ => callCount++;
 
-            client.OnRecivedData += handler;
-            client.OnRecivedData -= handler;
+            client.OnReceivedData += handler;
+            client.OnReceivedData -= handler;
 
             Assert.Equal(0, callCount);
         }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using ValidayClient.Logging;
@@ -22,23 +22,14 @@ namespace ValidayClient.Managers
         public string Name => nameof(CommandHandlerManager);
 
         /// <inheritdoc/>
-        /// <remarks>Set only by Start() and Stop() — private to prevent external bypass.</remarks>
         public bool IsActive { get; private set; }
 
-        /// <summary>
-        /// Registered command map exposed via ICommandRegistry.
-        /// Returns a true ReadOnlyDictionary — modification attempts throw NotSupportedException.
-        /// </summary>
+        /// <inheritdoc/>
         public IReadOnlyDictionary<ushort, Type> CommandsMap
             => new ReadOnlyDictionary<ushort, Type>(_clientCommandsMap);
 
-        /// <summary>
-        /// Backwards-compatible alias so existing call sites keep working.
-        /// </summary>
-        public IReadOnlyDictionary<ushort, Type> ClientCommandsMap => CommandsMap;
-
         private Dictionary<ushort, Type> _clientCommandsMap;
-        private ICommandPool<ushort, IClientCommand> _commandClientPool;
+        private ICommandPool<ushort, IClientCommand> _commandPool;
         private IConverterId<ushort> _converterId;
         private IClient? _client;
         private ILogger? _logger;
@@ -50,10 +41,10 @@ namespace ValidayClient.Managers
             IClient client,
             ILogger logger)
                 : this(
-                      client, 
-                      logger, 
-                      new UshortConverterId(), 
-                      new Dictionary<ushort, Type>()) 
+                      client,
+                      logger,
+                      new UshortConverterId(),
+                      new Dictionary<ushort, Type>())
         { }
 
         /// <summary>
@@ -75,11 +66,11 @@ namespace ValidayClient.Managers
 
             _clientCommandsMap = clientCommandsMap;
             _converterId = converterId;
-            _commandClientPool = new CommandPool<ushort, IClientCommand>();
+            _commandPool = new CommandPool<ushort, IClientCommand>();
             _client = client;
             _logger = logger;
 
-            _client.RegistrationManager(this);
+            _client.RegisterManager(this);
         }
 
         /// <inheritdoc/>
@@ -95,7 +86,7 @@ namespace ValidayClient.Managers
             }
 
             IsActive = true;
-            _client.OnRecivedData += OnDataReceived;
+            _client.OnReceivedData += OnDataReceived;
 
             _logger?.Log($"{nameof(CommandHandlerManager)} started!", LogType.Info);
         }
@@ -107,7 +98,7 @@ namespace ValidayClient.Managers
                 return;
 
             IsActive = false;
-            _client.OnRecivedData -= OnDataReceived;
+            _client.OnReceivedData -= OnDataReceived;
 
             _logger?.Log($"{nameof(CommandHandlerManager)} stopped!", LogType.Info);
         }
@@ -120,16 +111,16 @@ namespace ValidayClient.Managers
         /// <exception cref="InvalidOperationException">
         /// Thrown if the ID or the type is already registered.
         /// </exception>
-        public virtual void RegistrationCommand<T>(ushort id)
+        public virtual void RegisterCommand<T>(ushort id)
             where T : IClientCommand
         {
             if (_clientCommandsMap.ContainsKey(id))
                 throw new InvalidOperationException(
-                    $"ClientCommandsMap already contains id = {id}!");
+                    $"CommandsMap already contains id = {id}!");
 
             if (_clientCommandsMap.ContainsValue(typeof(T)))
                 throw new InvalidOperationException(
-                    $"ClientCommandsMap already contains type {typeof(T).Name}!");
+                    $"CommandsMap already contains type {typeof(T).Name}!");
 
             _clientCommandsMap.Add(id, typeof(T));
         }
@@ -149,11 +140,11 @@ namespace ValidayClient.Managers
                     return;
                 }
 
-                IClientCommand command = _commandClientPool.GetCommand(commandId, _clientCommandsMap);
+                IClientCommand command = _commandPool.GetCommand(commandId, _clientCommandsMap);
 
                 command.Execute(data);
 
-                _commandClientPool.ReturnCommandToPool(commandId, command, _clientCommandsMap);
+                _commandPool.ReturnCommandToPool(commandId, command, _clientCommandsMap);
             }
             catch (Exception ex)
             {
