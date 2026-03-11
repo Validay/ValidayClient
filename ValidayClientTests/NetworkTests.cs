@@ -289,5 +289,79 @@ namespace ValidayClientTests
 
             Assert.Equal(value, converter.Convert(bytes));
         }
+
+        [Fact]
+        public void UshortConverterId_EmptyArray_ThrowsArgumentException()
+        {
+            var converter = new UshortConverterId();
+
+            Assert.ThrowsAny<ArgumentException>(() =>
+                converter.Convert(Array.Empty<byte>()));
+        }
+
+        [Fact]
+        public void UshortConverterId_SingleByte_ThrowsArgumentException()
+        {
+            var converter = new UshortConverterId();
+
+            Assert.ThrowsAny<ArgumentException>(() =>
+                converter.Convert(new byte[] { 1 }));
+        }
+
+        [Fact]
+        public void Manager_StartTwice_IsIdempotent()
+        {
+            IClient client = new Client();
+            ILogger logger = new ConsoleLogger(LogType.Info);
+            var manager = new CommandHandlerManager(client, logger);
+
+            manager.Start();
+            manager.Start();
+
+            Assert.True(manager.IsActive);
+        }
+
+        [Fact]
+        public void Manager_StopWithoutStart_IsIdempotent()
+        {
+            IClient client = new Client();
+            ILogger logger = new ConsoleLogger(LogType.Info);
+            var manager = new CommandHandlerManager(client, logger);
+
+            var ex = Record.Exception(() => manager.Stop());
+
+            Assert.Null(ex);
+            Assert.False(manager.IsActive);
+        }
+
+        [Fact]
+        public void Client_Dispose_IsIdempotent()
+        {
+            var client = new Client();
+
+            var ex = Record.Exception(() =>
+            {
+                client.Dispose();
+                client.Dispose();
+            });
+
+            Assert.Null(ex);
+        }
+
+        [Fact]
+        public void Client_SendToServer_WhenNotConnected_DoesNotThrow()
+        {
+            IClient client = new Client();
+            var cmd = new NoOpServerCommand();
+
+            var ex = Record.Exception(() => client.SendToServer(cmd));
+
+            Assert.Null(ex);
+        }
+
+        class NoOpServerCommand : ValidayClient.Network.Commands.Interfaces.IServerCommand
+        {
+            public byte[] GetRawData() => new byte[] { 0, 0 };
+        }
     }
 }
