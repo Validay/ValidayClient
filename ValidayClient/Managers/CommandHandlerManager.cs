@@ -76,6 +76,9 @@ namespace ValidayClient.Managers
         /// <inheritdoc/>
         public void Start()
         {
+            if (IsActive)
+                return;
+
             if (_client == null)
             {
                 _logger?.Log(
