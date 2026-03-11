@@ -1,159 +1,340 @@
-# ValidayClient
+<div align="center">
 
-![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/Validay/ValidayClient)
-![GitHub commit activity](https://img.shields.io/github/commit-activity/t/Validay/ValidayClient)
-![GitHub last commit](https://img.shields.io/github/last-commit/Validay/ValidayClient)
+# 📡 ValidayClient
 
-Lightweight TCP socket client library for .NET. Designed around a command-handler pattern: incoming byte streams are routed to typed command handlers through a thread-safe object pool.
+**Lightweight, extensible TCP client for .NET**
 
-## Features
+[![.NET](https://img.shields.io/badge/.NET-netstandard2.1-512BD4?style=flat-square&logo=dotnet)](https://dotnet.microsoft.com)
+[![C#](https://img.shields.io/badge/C%23-8.0-239120?style=flat-square&logo=csharp)](https://learn.microsoft.com/en-us/dotnet/csharp/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-xUnit-blue?style=flat-square)](https://xunit.net)
 
-- Async TCP socket connection (`BeginConnect` / `BeginReceive`)
-- Command pool — command instances are reused, no per-message allocation
-- Manager system — extend behavior by registering independent managers
-- Pluggable logger (`ILogger`) and ID converter (`IConverterId<T>`)
-- IPv4 and IPv6 support
+---
 
-## Installation
+*Designed to pair with [ValidayServer](https://github.com/your-org/ValidayServer).*
 
-Install via NuGet:
+</div>
 
-```
-dotnet add package ValidayClient
-```
+---
 
-## Quick start
+## 📋 Table of Contents
 
-### 1. Implement your commands
+- [Features](#-features)
+- [Quick Start](#-quick-start)
+- [Architecture](#-architecture)
+- [Commands](#-commands)
+- [Managers](#-managers)
+- [Configuration](#-configuration)
+- [Logging](#-logging)
 
-Commands received **from** the server implement `IClientCommand`:
+---
+
+## ✨ Features
+
+- 🔌 **Async TCP** — non-blocking connect and receive loop
+- 🧩 **Manager system** — attach any number of independent managers to the client
+- 📦 **Command pool** — reuse command instances to reduce GC pressure
+- ⚙️ **Fully configurable** — IP, port, buffer size and more
+- 🔍 **ICommandRegistry** — managers can inspect registered commands without coupling to `CommandHandlerManager`
+- 🧪 **Testable** — clean interfaces throughout, xUnit test suite included
+
+---
+
+## 🚀 Quick Start
+
+### 1. Create a command
 
 ```csharp
+using ValidayClient.Network.Commands.Interfaces;
+
+// Incoming command — handles a packet sent by the server
 public class ChatMessageCommand : IClientCommand
 {
     public void Execute(byte[] rawData)
     {
         string message = Encoding.UTF8.GetString(rawData, 2, rawData.Length - 2);
-        Console.WriteLine($"[Chat] {message}");
+        Console.WriteLine($"Server says: {message}");
     }
 }
 ```
 
-Commands sent **to** the server implement `IServerCommand`:
-
 ```csharp
-public class PingCommand : IServerCommand
+// Outgoing command — builds a packet to send to the server
+public class PingServerCommand : IServerCommand
 {
     public byte[] GetRawData()
     {
-        return BitConverter.GetBytes((ushort)1);
+        byte[] id      = BitConverter.GetBytes((ushort)1);
+        byte[] payload = Encoding.UTF8.GetBytes("ping");
+        return id.Concat(payload).ToArray();
     }
 }
 ```
 
-### 2. Configure and create the client
+### 2. Connect to the server
 
 ```csharp
-ClientSettings settings = new ClientSettings(
-    ip: "127.0.0.1",
-    port: 8888,
-    bufferSize: 1024,
-    maxDepthReadPacket: 64,
-    markerStartPacket: new byte[] { 1, 2, 3 },
-    logger: new ConsoleLogger(LogType.Info));
+using ValidayClient.Network;
+using ValidayClient.Managers;
+using ValidayClient.Network.Interfaces;
+using ValidayClient.Logging;
+using ValidayClient.Logging.Interfaces;
 
-IClient client = new Client(settings, hideSocketError: true);
-```
-
-Or use defaults (localhost:8888, 1024-byte buffer):
-
-```csharp
 IClient client = new Client();
-```
-
-### 3. Register managers
-
-```csharp
 ILogger logger = new ConsoleLogger(LogType.Info);
 
+// Register managers before connecting
 CommandHandlerManager commandHandler = new CommandHandlerManager(client, logger);
-commandHandler.RegisterCommand<ChatMessageCommand>(id: 42);
-```
 
-Managers register themselves into the client automatically.
+// Register incoming command handlers
+commandHandler.RegistrationCommand<ChatMessageCommand>(1);
 
-### 4. Subscribe to events (optional)
-
-```csharp
-client.OnConnected    += () => Console.WriteLine("Connected!");
-client.OnDisconnected += () => Console.WriteLine("Disconnected.");
-client.OnReceivedData += data => Console.WriteLine($"Received {data.Length} bytes");
-client.OnSentData     += data => Console.WriteLine($"Sent {data.Length} bytes");
-```
-
-### 5. Connect
-
-```csharp
+// Connect
 client.Connect();
-```
 
-### 6. Send commands
+while (client.IsRun) { }
 
-```csharp
-client.SendToServer(new PingCommand());
-```
-
-### 7. Disconnect
-
-```csharp
 client.Disconnect();
 ```
 
-## Custom managers
+### 3. Subscribe to events
 
-Implement `IManager` to add your own logic (e.g. heartbeat, reconnect, state sync):
+```csharp
+client.OnConnected    += ()      => Console.WriteLine("Connected!");
+client.OnDisconnected += ()      => Console.WriteLine("Disconnected.");
+client.OnRecivedData  += data    => Console.WriteLine($"Got {data.Length} bytes");
+client.OnSendedData   += data    => Console.WriteLine($"Sent {data.Length} bytes");
+```
+
+### 4. Send data to the server
+
+```csharp
+client.SendToServer(new PingServerCommand());
+```
+
+---
+
+## 🏗️ Architecture
+
+```
+ValidayClient
+├── Network
+│   ├── IClient            ← main contract
+│   ├── Client             ← TCP implementation (IDisposable)
+│   ├── ClientSettings     ← typed configuration (class, not struct)
+│   └── UshortConverterId  ← converts first 2 bytes of packet to command ID
+│
+├── Managers
+│   ├── IManager              ← Start / Stop / IsActive / Name
+│   ├── ICommandRegistry      ← read-only view of registered commands
+│   └── CommandHandlerManager ← routes packets to IClientCommand handlers
+│
+└── Commands
+    ├── IClientCommand   ← Execute(byte[] rawData) — handles incoming packets
+    ├── IServerCommand   ← GetRawData() — builds outgoing packets
+    └── CommandPool      ← thread-safe object pool per command type
+```
+
+### Data flow
+
+```
+TCP socket
+    │
+    ▼
+Client.OnDataReceived
+    │  fires
+    ▼
+IClient.OnRecivedData
+    │
+    └──► CommandHandlerManager
+              │  converts first 2 bytes → ushort command ID
+              │  looks up IClientCommand in CommandsMap
+              ▼
+         IClientCommand.Execute(rawData)
+              │
+              ▼
+         CommandPool.ReturnCommandToPool(...)
+```
+
+---
+
+## 📨 Commands
+
+### Incoming — `IClientCommand`
+
+Handles packets received **from the server**:
+
+```csharp
+public interface IClientCommand
+{
+    void Execute(byte[] rawData);
+}
+```
+
+The first **2 bytes** of every packet are treated as a `ushort` command ID. The rest is payload.
+
+**Register before calling `client.Connect()`:**
+
+```csharp
+commandHandler.RegistrationCommand<ChatMessageCommand>(1);
+commandHandler.RegistrationCommand<PlayerMoveCommand>(2);
+commandHandler.RegistrationCommand<PongCommand>(3);
+```
+
+Rules:
+- Each ID must be unique
+- Each command type can only be registered once
+- Registration after `Connect()` throws `InvalidOperationException`
+
+### Outgoing — `IServerCommand`
+
+Builds packets to send **to the server**:
+
+```csharp
+public interface IServerCommand
+{
+    byte[] GetRawData();
+}
+```
+
+```csharp
+public class MoveCommand : IServerCommand
+{
+    private readonly float _x, _y;
+
+    public MoveCommand(float x, float y)
+    {
+        _x = x;
+        _y = y;
+    }
+
+    public byte[] GetRawData()
+    {
+        using var ms = new MemoryStream();
+        using var bw = new BinaryWriter(ms);
+        bw.Write((ushort)2); // command ID
+        bw.Write(_x);
+        bw.Write(_y);
+        return ms.ToArray();
+    }
+}
+
+// usage:
+client.SendToServer(new MoveCommand(1.5f, 3.0f));
+```
+
+---
+
+## 🧩 Managers
+
+Managers attach to the client's event bus. Any class implementing `IManager` can be registered.
+
+```csharp
+public interface IManager
+{
+    string Name    { get; }
+    bool   IsActive { get; }
+    void   Start();
+    void   Stop();
+}
+```
+
+### Built-in managers
+
+| Manager | Purpose |
+|---|---|
+| `CommandHandlerManager` | Routes received packets to registered `IClientCommand` handlers |
+
+### Custom manager example
 
 ```csharp
 public class HeartbeatManager : IManager
 {
-    public string Name => nameof(HeartbeatManager);
-    public bool IsActive { get; private set; }
+    public string Name     => nameof(HeartbeatManager);
+    public bool   IsActive { get; private set; }
 
     private readonly IClient _client;
+    private Timer? _timer;
 
     public HeartbeatManager(IClient client)
     {
         _client = client;
-        _client.RegisterManager(this);
+        _client.RegistrationManager(this);
     }
 
     public void Start()
     {
         IsActive = true;
-        // start heartbeat timer...
+        _timer = new Timer(_ =>
+        {
+            if (_client.IsRun)
+                _client.SendToServer(new PingServerCommand());
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
     }
 
     public void Stop()
     {
         IsActive = false;
-        // stop heartbeat timer...
+        _timer?.Dispose();
+        _timer = null;
     }
 }
 ```
 
-## Log levels
+> **Note:** `ICommandRegistry` lets your managers inspect registered commands without depending on `CommandHandlerManager` directly:
+> ```csharp
+> var registry = client.Managers.OfType<ICommandRegistry>().FirstOrDefault();
+> bool known = registry?.CommandsMap.ContainsKey(commandId) ?? false;
+> ```
 
-| Level           | Usage                           |
-|-----------------|---------------------------------|
-| `Low`           | High-frequency internal events  |
-| `Info`          | Connection lifecycle            |
-| `Warning`       | Unknown commands, soft errors   |
-| `Error`         | Recoverable failures            |
-| `CriticalError` | Fatal connection errors         |
+---
 
-Supply a custom `ILogger` to redirect output to any logging framework.
+## ⚙️ Configuration
 
-## Roadmap
+```csharp
+var settings = new ClientSettings(
+    ip:                 "192.168.1.10",     // server IP
+    port:               7777,               // server port
+    bufferSize:         4096,               // receive buffer bytes
+    maxDepthReadPacket: 64,                 // packet read depth guard
+    markerStartPacket:  new byte[] { 0xFF, 0xFE }, // packet start marker
+    logger:             new ConsoleLogger(LogType.Info));
 
-- [ ] Packet framing with `MarkerStartPacket` / `MaxDepthReadPacket`
-- [ ] Reconnect policy
+IClient client = new Client(settings, hideSocketError: false);
+```
+
+| Parameter | Default | Description |
+|---|---|---|
+| `Ip` | `127.0.0.1` | Server address to connect to |
+| `Port` | `8888` | Server port (0–65535) |
+| `BufferSize` | `1024` | Receive buffer in bytes |
+| `MaxDepthReadPacket` | `64` | Framing guard depth |
+| `MarkerStartPacket` | `{1,2,3}` | Packet boundary marker |
+
+---
+
+## 📝 Logging
+
+Implement `ILogger` to plug in any logging backend:
+
+```csharp
+public interface ILogger
+{
+    void Log(string message, LogType logType);
+}
+```
+
+`ConsoleLogger` is included out of the box. Filter by level:
+
+```csharp
+// Only Warning and above will be printed
+var logger = new ConsoleLogger(LogType.Warning);
+```
+
+| Level | When to use |
+|---|---|
+| `Low` | Verbose / per-packet traces |
+| `Info` | Connect / disconnect events |
+| `Warning` | Unexpected but recoverable events |
+| `Error` | Socket failures |
+| `CriticalError` | Client cannot connect |
