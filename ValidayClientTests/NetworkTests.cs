@@ -52,7 +52,7 @@ namespace ValidayClientTests
             ILogger logger = new ConsoleLogger(LogType.Info);
             var handler = new CommandHandlerManager(client, logger);
 
-            Assert.Empty(handler.ClientCommandsMap);
+            Assert.Empty(handler.CommandsMap);
         }
 
         [Fact]
@@ -134,7 +134,7 @@ namespace ValidayClientTests
         }
 
         [Fact]
-        public void RegistrationManager_AddsToCollection()
+        public void RegisterManager_AddsToCollection()
         {
             IClient client = new Client();
             ILogger logger = new ConsoleLogger(LogType.Info);
@@ -145,7 +145,7 @@ namespace ValidayClientTests
         }
 
         [Fact]
-        public void RegistrationManager_DuplicateName_ThrowsInvalidOperationException()
+        public void RegisterManager_DuplicateName_ThrowsInvalidOperationException()
         {
             Assert.Throws<InvalidOperationException>(() =>
             {
@@ -158,7 +158,7 @@ namespace ValidayClientTests
         }
 
         [Fact]
-        public void RegistrationManager_ManagerAppearsInCollection()
+        public void RegisterManager_ManagerAppearsInCollection()
         {
             IClient client = new Client();
             ILogger logger = new ConsoleLogger(LogType.Info);

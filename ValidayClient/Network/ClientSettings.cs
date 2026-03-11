@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Net;
 using System.Net.Sockets;
 using ValidayClient.Logging;
@@ -16,32 +16,32 @@ namespace ValidayClient.Network
         /// <summary>
         /// IP address of the server to connect to
         /// </summary>
-        public string Ip { get; set; }
+        public string Ip { get; private set; }
 
         /// <summary>
         /// Port of the server to connect to
         /// </summary>
-        public int Port { get; set; }
+        public int Port { get; private set; }
 
         /// <summary>
         /// Receive buffer size in bytes
         /// </summary>
-        public int BufferSize { get; set; }
+        public int BufferSize { get; private set; }
 
         /// <summary>
         /// Maximum read depth for a single packet (framing guard)
         /// </summary>
-        public int MaxDepthReadPacket { get; set; }
+        public int MaxDepthReadPacket { get; private set; }
 
         /// <summary>
         /// Byte sequence that marks the beginning of a new packet
         /// </summary>
-        public byte[] MarkerStartPacket { get; set; }
+        public byte[] MarkerStartPacket { get; private set; }
 
         /// <summary>
         /// Logger used by the client
         /// </summary>
-        public ILogger Logger { get; set; }
+        public ILogger Logger { get; private set; }
 
         /// <summary>
         /// Ready-to-use default settings (localhost:8888)

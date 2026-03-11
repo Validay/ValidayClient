@@ -1,91 +1,58 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using ValidayClient.Network.Commands.Interfaces;
 
 namespace ValidayClient.Network.Commands
 {
     /// <summary>
-    /// Base pool commands
+    /// Thread-safe object pool for client commands.
+    /// Commands are bucketed by their concrete type and reused across calls.
     /// </summary>
-    /// <typeparam name="TId">Type id command</typeparam>
-    /// <typeparam name="TCommand">Type command</typeparam>
+    /// <typeparam name="TId">Command ID type</typeparam>
+    /// <typeparam name="TCommand">Command interface type</typeparam>
     public class CommandPool<TId, TCommand> : ICommandPool<TId, TCommand>
         where TCommand : class
     {
-        private class CommandElement
-        {
-            public TId Id { get; set; }
-            public TCommand? Command { get; set; }
-
-            public CommandElement(
-                TId id,
-                TCommand? command)
-            {
-                Id = id;
-                Command = command;
-            }
-        }
-
-        private readonly ConcurrentDictionary<Type, ConcurrentBag<CommandElement>> _commandPool;
+        private readonly ConcurrentDictionary<Type, ConcurrentBag<TCommand>> _pool;
 
         /// <summary>
         /// Default constructor
         /// </summary>
         public CommandPool()
         {
-            _commandPool = new ConcurrentDictionary<Type, ConcurrentBag<CommandElement>>();
+            _pool = new ConcurrentDictionary<Type, ConcurrentBag<TCommand>>();
         }
 
-        /// <summary>
         /// <inheritdoc/>
-        /// </summary>
-        /// <exception cref="KeyNotFoundException">When id command dont exist</exception>
+        /// <exception cref="KeyNotFoundException">Thrown when id is not present in commandsMap.</exception>
         public TCommand GetCommand(
-            TId id, 
+            TId id,
             IDictionary<TId, Type> commandsMap)
         {
             if (!commandsMap.ContainsKey(id))
-                throw new KeyNotFoundException($"Command with ID {id} not founded in client commands map.");
+                throw new KeyNotFoundException($"Command with ID {id} not found in commands map.");
 
-            lock (_commandPool)
-            {
-                if (_commandPool.ContainsKey(commandsMap[id])
-                    && _commandPool.TryGetValue(commandsMap[id], out ConcurrentBag<CommandElement> bag))
-                {
-                    bag.TryTake(out CommandElement? element);  // атомарно берёт и удаляет
+            Type commandType = commandsMap[id];
+            ConcurrentBag<TCommand> bag = _pool.GetOrAdd(commandType, _ => new ConcurrentBag<TCommand>());
 
-                    return element?.Command
-                        ?? (TCommand)Activator.CreateInstance(commandsMap[id]);
-                }
-                else
-                {
-                    _commandPool.TryAdd(commandsMap[id], new ConcurrentBag<CommandElement>());
-                    return (TCommand)Activator.CreateInstance(commandsMap[id]);
-                }
-            }
+            return bag.TryTake(out TCommand? command)
+                ? command
+                : (TCommand)Activator.CreateInstance(commandType)!;
         }
 
-        /// <summary>
         /// <inheritdoc/>
-        /// </summary>
+        /// <exception cref="KeyNotFoundException">Thrown when id is not present in commandsMap.</exception>
         public void ReturnCommandToPool(
             TId id,
             TCommand command,
             IDictionary<TId, Type> commandsMap)
         {
             if (!commandsMap.ContainsKey(id))
-                throw new KeyNotFoundException($"Command with ID {id} not founded in client commands map.");
+                throw new KeyNotFoundException($"Command with ID {id} not found in commands map.");
 
-            CommandElement commandElement = new CommandElement(
-                id,
-                command);
-
-            if (!_commandPool.ContainsKey(commandsMap[id]))
-                _commandPool.TryAdd(commandsMap[id], new ConcurrentBag<CommandElement>());
-
-            _commandPool[commandsMap[id]].Add(commandElement);
+            Type commandType = commandsMap[id];
+            _pool.GetOrAdd(commandType, _ => new ConcurrentBag<TCommand>()).Add(command);
         }
     }
 }

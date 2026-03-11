@@ -1,4 +1,4 @@
-﻿using ValidayClient.Logging;
+using ValidayClient.Logging;
 using ValidayClient.Logging.Interfaces;
 using ValidayClient.Managers;
 using ValidayClient.Network;
